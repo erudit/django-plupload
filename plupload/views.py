@@ -7,6 +7,9 @@ from django.conf import settings
 from django.template import RequestContext
 from django.shortcuts import render_to_response
 
+from plupload.helpers import upload_exists, namespace_exists, create_namespace, path_for_upload
+from plupload.models import ResumableFile, ResumableFileStatus
+
 
 def upload(request):
     if request.method == "POST":
@@ -54,6 +57,49 @@ def upload_file(request):
         return HttpResponse()
     else:
         raise Http404
+
+
+def get_upload_identifiers_or_404(request):
+    request_keys = request.POST.keys()
+
+    verified_keys = [
+        key in request_keys
+        for key in ('model', 'pk', 'filename')
+    ]
+
+    if not all(verified_keys):
+        raise Http404
+
+    return (
+        request.POST['model'],
+        request.POST['pk'],
+        request.POST['filename']
+    )
+
+
+def upload_start(request):
+
+    model_name, model_pk, filename = get_upload_identifiers_or_404(request)
+
+    if not upload_exists(model_name, model_pk, filename):
+
+        if not namespace_exists(model_name, model_pk):
+            create_namespace(model_name, model_pk)
+
+        ResumableFile(
+            path=path_for_upload(
+                model_name,
+                model_pk,
+                filename
+            ),
+            status=ResumableFileStatus.NEW
+        ).save()
+
+    return HttpResponse()
+
+
+def upload_error(request):
+    pass
 
 
 def handle_uploaded_file(f, chunk, filename):
