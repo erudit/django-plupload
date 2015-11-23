@@ -6,7 +6,7 @@ from django.http import Http404
 import mock
 
 from plupload.models import ResumableFile, ResumableFileStatus
-from plupload.views import upload_start, get_upload_identifiers_or_404
+from plupload.views import upload_start, upload_error, get_upload_identifiers_or_404
 from plupload.forms import PlUploadFormField
 from plupload.fields import ResumableFileField
 from plupload.helpers import (
@@ -19,7 +19,7 @@ class TestResumableFileField(TestCase):
 
     def setUp(self):
         class MyTestModel(models.Model):
-            my_field = ResumableFileField(upload_to='allo')
+            my_field = ResumableFileField(upload_to='test_files')
 
         self.test_model_class = MyTestModel
         self.factory = RequestFactory()
@@ -77,10 +77,11 @@ class TestResumableFileField(TestCase):
             {'model': 'IssueSubmission', 'pk': 1, 'filename': 'test.png'}
         )
 
-        name, pk, filename = get_upload_identifiers_or_404(request)
+        name_pk_filename = get_upload_identifiers_or_404(request)
 
-        self.assertIsNotNone(
-            name
+        # Assert that all the name, pk
+        self.assertTrue(
+            all(name_pk_filename)
         )
 
         request = self.factory.post(
@@ -119,6 +120,40 @@ class TestResumableFileField(TestCase):
                 1,
                 "A ResumableFile should have been created"
             )
+
+    def test_upload_error(self):
+        """ Test that posting to upload_error update the model """
+        import os
+
+        request = self.factory.post(
+            'plupload/upload_start',
+            {'model': 'IssueSubmission', 'pk': 1, 'filename': 'test.png'}
+        )
+
+        with mock.patch('os.makedirs', mock.MagicMock(spec=os.makedirs)):
+            upload_start(request)
+
+        request = self.factory.post(
+            'plupload/upload_error',
+            {'model': 'IssueSubmission', 'pk': 1, 'filename': 'test.png'}
+        )
+
+        response = upload_error(request)
+
+        resumable_file_count = ResumableFile.objects.filter(
+            path=path_for_upload(
+                "IssueSubmission",
+                "1",
+                "test.png",
+            ),
+            status=ResumableFileStatus.ERROR
+        ).count()
+
+        self.assertEquals(
+            resumable_file_count,
+            1,
+            "The ResumableFile should have failed"
+        )
 
     def test_directory_creation(self):
         """ Test that the directory is created when the field is saved """

@@ -5,7 +5,7 @@ import json
 from django.http import HttpResponse, Http404
 from django.conf import settings
 from django.template import RequestContext
-from django.shortcuts import render_to_response
+from django.shortcuts import render_to_response, get_object_or_404
 
 from plupload.helpers import upload_exists, namespace_exists, create_namespace, path_for_upload
 from plupload.models import ResumableFile, ResumableFileStatus
@@ -78,7 +78,10 @@ def get_upload_identifiers_or_404(request):
 
 
 def upload_start(request):
+    """ The view that is called when an upload is started
 
+    If the upload does not exist, it will be created
+    """
     model_name, model_pk, filename = get_upload_identifiers_or_404(request)
 
     if not upload_exists(model_name, model_pk, filename):
@@ -99,7 +102,18 @@ def upload_start(request):
 
 
 def upload_error(request):
-    pass
+    model_name, model_pk, filename = get_upload_identifiers_or_404(request)
+
+    resumable_file = get_object_or_404(
+        ResumableFile,
+        pk=model_pk, path=path_for_upload(
+            model_name, model_pk, filename
+        )
+    )
+
+    resumable_file.status = ResumableFileStatus.ERROR
+    resumable_file.save()
+    return HttpResponse()
 
 
 def handle_uploaded_file(f, chunk, filename):
