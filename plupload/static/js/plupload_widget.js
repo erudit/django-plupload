@@ -10,6 +10,7 @@ var create_uploader = function(params, filesizes) {
         url : params['url'],
         max_file_size : params['max_file_size'],
         chunk_size : params['chunk_size'],
+        drop_element: params['drop_element'],
         unique_names : false,
         multipart_params: {
             "csrfmiddlewaretoken" : csrf_token,
@@ -22,7 +23,6 @@ var create_uploader = function(params, filesizes) {
 
         init: {
             StateChanged: function(up) {
-
                 if (up.state == plupload.STARTED) {
                     for (var file_id in up.files) {
                         var file = up.files[file_id];
@@ -41,11 +41,18 @@ var create_uploader = function(params, filesizes) {
                 }
             },
 
+            BeforeUpload: function(up, file) {
+                var loaded = filesizes[file['name']];
+                if (loaded !== undefined) {
+                    file.loaded = loaded;
+                }
+            },
+
             FileUploaded: function(up, file, info) {
                 $('#' + params['id']).val(path + "/" + file.name);
             },
             PostInit: function() {
-                document.getElementById('filelist').innerHTML = '';
+                //document.getElementById('filelist').innerHTML = '';
 
                 document.getElementById('uploadfiles').onclick = function() {
                     uploader.start();

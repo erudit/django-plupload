@@ -125,6 +125,7 @@ def handle_uploaded_file(f, chunk, resumable_file):
     else:
         _file.write(f.read())
     resumable_file.uploadsize = _file.tell()
+    print(resumable_file)
     resumable_file.save()
 
 def upload_error(request):

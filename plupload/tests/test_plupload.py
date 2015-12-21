@@ -19,10 +19,34 @@ from plupload.helpers import (
 )
 
 
+model_mock = mock.MagicMock(
+    spec=models.Model
+)
+
+
+class MyTestModelManager(models.Manager):
+
+    def get(self, **kwargs):
+
+        fake_model = MyTestModel(
+            **kwargs
+        )
+
+        fake_model._state.db = 'default'
+        fake_model.resumable_file.add = mock.Mock()
+        return fake_model
+
+
 class MyTestModel(models.Model):
-    my_field = models.ManyToManyField(
+
+    resumable_file = models.ManyToManyField(
         'plupload.ResumableFile'
     )
+
+    objects = MyTestModelManager()
+
+    def save(self):
+        return True
 
 
 class TestUploadViews(TestCase):
@@ -30,8 +54,9 @@ class TestUploadViews(TestCase):
 
     def setUp(self):
 
-        self.sample_model = MyTestModel()
-        self.sample_model.save()
+        model_mock.objects = mock.Mock()
+
+        # self.sample_model.save()
 
         self.factory = RequestFactory()
 
@@ -45,7 +70,7 @@ class TestUploadViews(TestCase):
             status=ResumableFileStatus.NEW
         ).save()
 
-    @mock.patch('django.apps.apps.get_model', lambda x, y: MyTestModel)
+    @mock.patch('django.apps.apps.get_model', lambda x, y: mock.MagicMock(spec=MyTestModel))
     def test_upload_file_raises_400_when_malformed(self):
         request = self.factory.post(
             '/plupload/',
@@ -76,9 +101,6 @@ class TestUploadViews(TestCase):
 
         request.FILES['file'] = mock.MagicMock(spec=UploadedFile)
 
-        mocked_file = mock.Mock()
-        mocked_file.multiple_chunks = False
-
         with mock.patch("builtins.open", mock.MagicMock()) as mock_file:
             upload_file(request)
 
@@ -87,7 +109,7 @@ class TestUploadViews(TestCase):
             'ab'
         )
 
-    @mock.patch('django.apps.apps.get_model', lambda x, y: MyTestModel)
+    @mock.patch('django.apps.apps.get_model', lambda x, y: mock.MagicMock(spec=models.Model))
     def test_create_file(self):
         """ Test that files are created when no chunk is sent """
         request = self.factory.post(
@@ -132,7 +154,7 @@ class TestUploadViews(TestCase):
             get_upload_identifiers_or_404, request
         )
 
-    @mock.patch('django.apps.apps.get_model', lambda x, y: MyTestModel)
+    @mock.patch('django.apps.apps.get_model', lambda x, y: mock.MagicMock(spec=models.Model))
     def test_upload_start_new_files(self):
         """ Tests upload_start on new files """
         import os
@@ -161,7 +183,7 @@ class TestUploadViews(TestCase):
                 "A ResumableFile should have been created"
             )
 
-    @mock.patch('django.apps.apps.get_model', lambda x, y: MyTestModel)
+    @mock.patch('django.apps.apps.get_model', lambda x, y: mock.MagicMock(spec=models.Model))
     def test_upload_error(self):
         """ Test that posting to upload_error update the model """
         import os
@@ -199,10 +221,8 @@ class TestUploadViews(TestCase):
 class TestResumableFileField(TestCase):
 
     def setUp(self):
-        class MyTestModel(models.Model):
-            my_field = ResumableFileField(upload_to='test_files')
 
-        self.test_model_class = MyTestModel
+        self.test_model_class = mock.MagicMock(spec=models.Model)
         self.factory = RequestFactory()
         settings.UPLOAD_ROOT = '/tmp'
 
@@ -273,6 +293,10 @@ class TestResumableFileField(TestCase):
         # so we need to update
 
         my_test_model.save()
+        ResumableFile(
+            path="test"
+        ).save()
+
         self.assertEquals(
             os.makedirs.call_count,
             1,
@@ -282,9 +306,7 @@ class TestResumableFileField(TestCase):
         self.assertEquals(
             os.makedirs.call_args,
             mock.call(
-                "{}/MyTestModel/my_field/1".format(
-                    settings.UPLOAD_ROOT
-                )
+                "test"
             )
         )
 
